@@ -16,7 +16,7 @@ then
         then 
             echo "[양호] 텔넷이 활성화 되어있으나 루트 권한 접속이 제한되어있습니다." >> $report 2>&1
         else 
-            echo "[취약] 텔넷이 활성화 되어있으며 루트 권한 접속 제한이 설정되어있지않습니다." >> $report 2>&1
+            echo "[취약] 텔넷이 활성화 되어있으며 루트 권한 접속 제한이 설정되어있지 않습니다." >> $report 2>&1
             echo "[[조치방법]] /etc/pam.d/login 파일에 'auth required /lib/security/pam_securetty.so' 를 삽입하세요" >> $report 2>&1
         fi
     
@@ -29,7 +29,7 @@ then
         then 
             echo "[양호] 텔넷이 활성화 되어있으나 루트 권한 접속이 제한되어있습니다." >> $report 2>&1
         else 
-            echo "[취약] 텔넷이 활성화 되어있으며 루트 권한 접속 제한이 설정되어있지않습니다." >> $report 2>&1
+            echo "[취약] 텔넷이 활성화 되어있으며 루트 권한 접속 제한이 설정되어있지 않습니다." >> $report 2>&1
             echo "[[조치방법]] /etc/securetty 파일에 pts/0 ~ pts/x 설정을 제거하세요 " >> $report 2>&1
         fi
     fi
@@ -41,22 +41,24 @@ fi
 
 ##ssh 동작 확인 후 루트 권한 접속 제한 여부 확인
 
-if ps aux | grep -v grep | grep telnet > /dev/null
+if ps aux | grep -v grep | grep sshd > /dev/null
 then 
     if [ -f /etc/pam.d/login ]
     then
-        if grep -v '^#' /etc/pam.d/login | grep 'auth[[:space:]]\+required[[:space:]]\+/lib/security/pam_securetty.so' >/dev/null
+        if grep -v '^#' /etc/sshd_config | grep 'PermitRootLogin[[:space:]]\+no' >/dev/null
         then 
-            echo "[양호] 텔넷이 활성화 되어있으나 루트 권한 접속이 제한되어있습니다." >> $report 2>&1
+            echo "[양호] ssh가 활성화 되어있으나 루트 권한 접속이 제한되어있습니다." >> $report 2>&1
         else 
-            echo "[취약] 텔넷이 활성화 되어있으며 루트 권한 접속 제한이 설정되어있지않습니다." >> $report 2>&1
-            echo "[[조치방법]] /etc/pam.d/login 파일에 'auth required /lib/security/pam_securetty.so' 를 삽입하세요" >> $report 2>&1
+            echo "[취약] ssh가 활성화 되어있으며 루트 권한 접속 제한이 설정되어있지 않습니다." >> $report 2>&1
+            echo "[[조치방법]] /etc/sshd_config 파일에 'PermitRootLogin no' 를 삽입하세요" >> $report 2>&1
         fi
     
     else
-        echo "[기타] /etc/pam.d/login 파일이 존재하지 않습니다." >> $report 2>&1
+        echo "[기타] /etc/sshd_config 파일이 존재하지 않습니다." >> $report 2>&1
     fi
 fi
+
+
 
 # - Password complexity settings: High U-02
 # - Account lockout threshold settings: High U-03
