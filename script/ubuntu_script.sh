@@ -8,11 +8,11 @@ report="report_$(date).txt"
 echo "----Restrict remote access to root account: High U-01----" >> $report 2>&1
 
 ##Telnet 동작 확인 후 루트 권한 접속 제한 여부 확인
-if ps aux | grep -v grep | grep telnet > /dev/null
+if ps aux | grep -v grep | grep -q telnet 
 then 
     if [ -f /etc/pam.d/login ]
     then
-        if grep -v '^#' /etc/pam.d/login | grep 'auth[[:space:]]\+required[[:space:]]\+/lib/security/pam_securetty.so' >/dev/null
+        if grep -v '^#' /etc/pam.d/login | tr -s ' ' | grep -q 'auth required /lib/security/pam_securetty.so'
         then 
             echo "[양호] 텔넷이 활성화 되어있으나 루트 권한 접속이 제한되어있습니다." >> $report 2>&1
         else 
@@ -25,42 +25,77 @@ then
     fi
     if [ -f /etc/securetty ]
     then 
-        if grep -v '^#' /etc/securetty | grep -q '^pts/[0-9]\+' >> /dev/null
+        if grep -v '^#' /etc/securetty | grep -q '^pts/[0-9]\+' 
         then 
             echo "[양호] 텔넷이 활성화 되어있으나 루트 권한 접속이 제한되어있습니다." >> $report 2>&1
         else 
             echo "[취약] 텔넷이 활성화 되어있으며 루트 권한 접속 제한이 설정되어있지 않습니다." >> $report 2>&1
             echo "[[조치방법]] /etc/securetty 파일에 pts/0 ~ pts/x 설정을 제거하세요 " >> $report 2>&1
         fi
-    fi
+    
     else
         echo "[기타] /etc/securetty 파일이 존재하지 않습니다." >> $report 2>&1
-
+    fi
 fi
 
 
 ##ssh 동작 확인 후 루트 권한 접속 제한 여부 확인
 
-if ps aux | grep -v grep | grep sshd > /dev/null
+if ps aux | grep -v grep | grep -q sshd 
 then 
-    if [ -f /etc/pam.d/login ]
+    if [ -f /etc/ssh/sshd_config ]
     then
-        if grep -v '^#' /etc/sshd_config | grep 'PermitRootLogin[[:space:]]\+no' >/dev/null
+        if grep -v '^#' /etc/ssh/sshd_config | tr -s ' '|grep -q 'PermitRootLogin no' 
         then 
             echo "[양호] ssh가 활성화 되어있으나 루트 권한 접속이 제한되어있습니다." >> $report 2>&1
         else 
-            echo "[취약] ssh가 활성화 되어있으며 루트 권한 접속 제한이 설정되어있지 않습니다." >> $report 2>&1
-            echo "[[조치방법]] /etc/sshd_config 파일에 'PermitRootLogin no' 를 삽입하세요" >> $report 2>&1
+            echo "[취약] ssh가 활성화 되어있으나 루트 권한 접속 제한이 설정되어있지 않습니다." >> $report 2>&1
+            echo "[[조치방법]] /etc/ssh/sshd_config 파일에 'PermitRootLogin no' 를 삽입하세요" >> $report 2>&1
         fi
     
     else
-        echo "[기타] /etc/sshd_config 파일이 존재하지 않습니다." >> $report 2>&1
+        echo "[기타] /etc/ssh/sshd_config 파일이 존재하지 않습니다." >> $report 2>&1
     fi
 fi
 
-
+if ! ps aux | grep -v grep | grep -E -q "sshd|telnet" 
+then 
+    echo "[양호] 원격 터미널이 활성화 되어있지 않습니다" >> $report 2>&1
+fi    
 
 # - Password complexity settings: High U-02
+
+echo "----Password complexity settings: High U-02----" >> $report 2>&1
+
+if [ -f /etc/login.defs]
+    then
+    
+        min_len=$(grep ^PASS_MIN_LEN /etc/login.defs | tr -s ' ' | cut -d ' ' -f2)
+
+        if [ -n "$min_len" ] && [ "$min_len" -ge 8 ]
+        then
+            echo "[양호] /etc/login.defs 비밀번호 설정이 8자 이상으로 설정되어있습니다."
+        else
+            echo "[취약] /etc/login.defs 비밀번호 설정이 8자 이하거나 존재하지 않습니다."
+        fi
+    else
+         echo "[기타] /etc/login.defs 파일이 존재하지 않습니다."
+
+fi
+
+if [ -f /etc/pam.d/common-password]
+    then
+    
+       
+
+
+
+    else
+         echo "[기타] /etc/pam.d/common-password 파일이 존재하지 않습니다."
+
+fi
+
+
 # - Account lockout threshold settings: High U-03
 # - Protection of password files: High U-04
 # - Prohibit UIDs of '0' other than root: Medium U-44
