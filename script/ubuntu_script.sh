@@ -599,7 +599,7 @@ do
             u_14_perm=$(ls -l $u_14_path_file | awk '{print $1}')
             u_14_usr=$(ls -l $u_14_path_file | awk '{print $3}')
 
-            if [[ $u_14_asr != "root" && $u_14_usr != $(basename "$p") ]]
+            if [[ $u_14_usr != "root" && $u_14_usr != $(basename "$p") ]]
             then
                 echo "[취약] $u_14_path_file 의 파일 소유자가 루트나 계정주가 아닙니다.">> $report 2>&1
                 echo "[[조치방법]] 'chown {username} $u_14_path_file' 명려어를 통해 소유자를 변경하세요 .">> $report 2>&1
@@ -623,16 +623,15 @@ then
 fi
 
 
-
 # - Check for world writable files: High U-15
 echo " " >> $report 2>&1
 echo "----Check for world writable files: High U-15----" >> $report 2>&1
 
-if [ $(find / -type f -perm –2 –exec ls –l {} \;) -gt 0 ]
+if find / -type f -perm -002 2>/dev/null | grep -q .
 then 
     echo "[취약] 다음과 같은 파일에 world writable 파일이 존재합니다.">> $report 2>&1
-    echo "$(find / -type f -perm –2 –exec ls –l {} \;)">> $report 2>&1
-    echo "[[조치방법]]'chmod o-w {file_name}' 명령어를 사용하여 쓰기권한을 제거하세요"
+    echo "$(find / -type f -perm -002 -exec ls -l {} \; 2>/dev/null)">> $report 2>&1
+    echo "[[조치방법]]'chmod o-w {file_name}' 명령어를 사용하여 쓰기권한을 제거하세요">> $report 2>&1
 else 
     echo "[양호] world writable 파일이 존재하지 않습니다.">> $report 2>&1
 fi
@@ -641,13 +640,13 @@ fi
 echo " " >> $report 2>&1
 echo "----Check for device files not in /dev: High U-16----" >> $report 2>&1
 
-if [ $(find /dev –type f –exec ls –l {} \;) -gt 0 ]
+if find / -type f -perm -002 2>/dev/null | grep -q .
 then 
     echo "[기타] 다음과 같이 /dev에 device 파일이 존재합니다.">> $report 2>&1
-    echo "$(find /dev –type f –exec ls –l {} \;)">> $report 2>&1
-    echo "[[조치방법]]major, minor number를 가지지 않는 파일들을 제거하세요"
+    echo "$(find /dev -type f -exec ls -l {} \; 2>/dev/null)">> $report 2>&1
+    echo "[[조치방법]]major, minor number를 가지지 않는 파일들을 제거하세요">> $report 2>&1
 else 
-    echo "[양호] world writable 파일이 존재하지 않습니다.">> $report 2>&1
+    echo "[양호] /dev에 device 파일이 존재하지 않습니다.">> $report 2>&1
 fi
 
 
@@ -655,17 +654,106 @@ fi
 echo " " >> $report 2>&1
 echo "----Prohibit the use of $HOME/.rhosts, hosts.equiv: High U-17----" >> $report 2>&1
 
-if [ 사용안하면 ]
+declare -a u_17_usrdir_arr 
+declare -a u_17_rhosts_arr
+declare -a u_17_rhosts_usr_arr
+u_17_vuln=0
+
+while IFS=: read -r usr _ uid _ _ dir _ 
+do
+    if [ $uid -ge 1000 ]
+    then 
+        u_17_usrdir_arr+=("$dir")
+
+        u_17_dir_path="$dir/.rhosts" 
+        if [ -f $u_17_dir_path ]
+        then 
+            u_17_rhosts_arr+=$u_17_dir_path
+            u_17_rhosts_usr_arr+=$usr
+        fi
+    fi
+
+done < /etc/passwd
+  
+
+if [[ -f /etc/hosts.equiv && ${#u_17_rhosts_arr[@]} -eq 0 ]]
 then
-    echo "[양호]"
+    echo "[양호] hosts.equive 와 .rhosts 파일이 존재하지 않습니다.">> $report 2>&1
 else
-    if[]
-    
+    if [ -f /etc/hosts.equiv ]
+    then 
+        if [ $(ls -l /etc/hosts.equiv | aws '{print $3}') != 'root' ]
+        then 
+            echo "[취약] /etc/hosts.equiv 파일의 소유주가 root 가 아닙니다.">> $report 2>&1
+            u_17_vuln=1
+        fi
+
+        if [ $(stat -c "%a" /etc/hosts.equiv) -gt 600 ]
+        then 
+            echo "[취약] /etc/hosts.equiv 파일의 권한이 600 이상입니다.">> $report 2>&1
+            u_17_vuln=1
+        fi
+
+        if [ $(grep -q "+" /etc/hosts.equiv) ]
+        then
+            echo "[취약] /etc/hosts.equiv 파일에 '+' 설정이 존재합니다.">> $report 2>&1
+            u_17_vuln=1
+        fi
+        
+        if [ $u_17_vuln -eq 0 ]
+        then 
+            echo "[양호] hosts.equive 파일이 존재하지만 보안설정이 양호하게 적용되어있습니다.">> $report 2>&1
+        fi
+    fi
+        
+    if [ ${#u_17_rhosts_arr[@]} -gt 0 ]
+    then
+        u_17_vuln=0
+        for i in "${!u_17_rhosts_arr[@]}"
+        do 
+            if [[ "$(ls -l ${u_17_rhosts_arr[$i]} | awk '{print $3}')" != "${u_17_rhosts_usr_arr[$i]}" && "$(ls -l ${u_17_rhosts_arr[$i]} | awk '{print $3}')" != "root" ]]
+            then 
+                echo "[취약] ${u_17_rhosts_arr[$i]} 파일의 소유주가 계정주나 root가 아닙니다.">> $report 2>&1
+                u_17_vuln=1
+            fi
+
+            if [ $(stat -c "%a" ${u_17_rhosts_arr[$i]}) -gt 600 ]
+            then 
+                echo "[취약] ${u_17_rhosts_arr[$i]} 파일의 권한이 600 이상입니다.">> $report 2>&1
+                u_17_vuln=1
+            fi
+
+            if [ $(grep -q "+" ${u_17_rhosts_arr[$i]}) ]
+            then
+                echo "[취약] ${u_17_rhosts_arr[$i]} 파일에 '+' 설정이 존재합니다.">> $report 2>&1
+                u_17_vuln=1
+            fi
+        done        
+
+        if [ $u_17_vuln -eq 0 ]
+        then 
+            echo "[양호] .rhosts 파일이 존재하지만 보안설정이 양호하게 적용되어있습니다.">> $report 2>&1
+        fi
+    fi
 fi
 
 # - Restrict login IP and port: High U-18
 echo " " >> $report 2>&1
 echo "----Restrict login IP and port: High U-18----" >> $report 2>&1
+
+# tcp wrapper 를 사용할 경우
+if [ -f /etc/hosts.deny ]
+then
+    if [ $(grep '^#' /etc/hosts.deny | grep -i -q ALL:ALL ) ]
+    then
+        echo "[양호] /etc/hosts.deny 파일에 설정이 올바르게 되어있습니다.">> $report 2>&1
+    else
+        echo "[취약] /etc/hosts.deny 파일에 설정이 올바르게 되어있지 않습니다.">> $report 2>&1
+        echo "[[조치방법]] /etc/hosts.deny 파일에 'ALL:ALL'을 설정하세요.">> $report 2>&1
+    fi
+else
+    echo "[기타] /etc/hosts.deny 파일이 존재하지 않습니다.">> $report 2>&1
+fi
 
 
 # - Prohibit UIDs of '0' other than root: Medium U-44
