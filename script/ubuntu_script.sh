@@ -210,21 +210,18 @@ echo " " >> $report 2>&1
 echo "----Set permissions and path for root home and path directories: High U-05----" >> $report 2>&1
 
 
-OIFS="$IFS"
-IFS=":"
-path_arr=($PATH)
-IFS="$OIFS"
+read -r -a u_05_path_arr <<< "$(echo $PATH | tr ':' '\n')"
 
-good_len=$((${#path_arr[@]} * 2 / 3))
+u_05_good_len=$((${#u_05_path_arr[@]} * 2 / 3))
 
-for i in "${!path_arr[@]}"
+for i in "${!u_05_path_arr[@]}"
 do 
-    if [ $i -ge $good_len ]
+    if [ $i -ge $u_05_good_len ]
     then
         echo "[양호] PATH 환경변수에 “.” 이 앞이나 중간에 포함되어 있지 않습니다."  >> $report 2>&1
         break
     else
-        if [ ${path_arr[$i]} == "." ] 
+        if [ ${u_05_path_arr[$i]} == "." ] 
         then    
             echo "[취약] PATH 환경변수에 “.” 이 앞이나 중간에 포함되어 있습니다. "  >> $report 2>&1
             echo "[[조치방법]] 환경변수 설정파일을 수정하여 “.” 을 삭제하거나 맨 뒤에 위치하도록 수정하세요. "  >> $report 2>&1
@@ -694,7 +691,7 @@ else
             u_17_vuln=1
         fi
 
-        if [ $(grep -q "+" /etc/hosts.equiv) ]
+        if grep -q "+" /etc/hosts.equiv
         then
             echo "[취약] /etc/hosts.equiv 파일에 '+' 설정이 존재합니다.">> $report 2>&1
             u_17_vuln=1
@@ -723,7 +720,7 @@ else
                 u_17_vuln=1
             fi
 
-            if [ $(grep -q "+" ${u_17_rhosts_arr[$i]}) ]
+            if grep -q "+" ${u_17_rhosts_arr[$i]}
             then
                 echo "[취약] ${u_17_rhosts_arr[$i]} 파일에 '+' 설정이 존재합니다.">> $report 2>&1
                 u_17_vuln=1
@@ -744,7 +741,7 @@ echo "----Restrict login IP and port: High U-18----" >> $report 2>&1
 # tcp wrapper 를 사용할 경우
 if [ -f /etc/hosts.deny ]
 then
-    if [ $(grep '^#' /etc/hosts.deny | grep -i -q ALL:ALL ) ]
+    if grep '^#' /etc/hosts.deny | grep -i -q ALL:ALL 
     then
         echo "[양호] /etc/hosts.deny 파일에 설정이 올바르게 되어있습니다.">> $report 2>&1
     else
@@ -756,35 +753,141 @@ else
 fi
 
 
-# - Prohibit UIDs of '0' other than root: Medium U-44
+# - Disable finger service: High U-19
 
 echo " " >> $report 2>&1
-echo "----Prohibit UIDs of '0' other than root: Medium U-44----" >> $report 2>&1
+echo "----Disable finger service: High U-19----" >> $report 2>&1
+
+if [ -f /etc/inetd.conf ]
+then
+    if grep '^#' /etc/inetd.conf | grep -i -q finger 
+    then
+        echo "[취약] /etc/inetd.conf 파일에 finger 서비스가 활성화 되어있습니다.">> $report 2>&1
+        echo "[[조치방법]] /etc/inetd.conf 파일에서 finger 서비스를 주석처리하거나 삭제한 후 서비스를 재시작하세요.">> $report 2>&1
+    else
+        echo "[양호] /etc/inetd.conf 파일에 finger 서비스가 활성화 되어있지않습니다.">> $report 2>&1
+    fi
+else
+    echo "[기타] /etc/inetd.conf 파일이 존재하지 않습니다.">> $report 2>&1
+fi
+
+if [ -f /etc/xinetd.d/finger ]
+then
+    if grep 'disable' /etc/xinetd.d/finger | tr -s ' ' | grep -q no 
+    then
+        echo "[취약] /etc/xinetd.d/finger 파일에 finger 서비스가 활성화 되어있습니다.">> $report 2>&1
+        echo "[[조치방법]] /etc/xinetd.d/finger 파일에서 'disable = yes'로 변경한 후 서비스를 재시작하세요.">> $report 2>&1
+    else
+        echo "[양호] /etc/xinetd.d/finger 파일에 finger 서비스가 활성화 되어있지않습니다.">> $report 2>&1
+    fi
+else
+    echo "[기타] /etc/xinetd.d/finger 파일이 존재하지 않습니다.">> $report 2>&1
+fi
 
 
-
-# - Restrict root account's use of su: Low U-45
-# - Set minimum password length: Medium U-46
-# - Set maximum password lifetime: Medium U-47
-# - Set minimum password lifetime: Medium U-48
-# - Removal of unnecessary accounts: Low U-49
-# - Include a minimal number of accounts in the admin group: Low U-50
-# - Prohibit GIDs without accounts: Low U-51
-# - Prohibit identical UIDs: Medium U-52
-# - Check user shells: Low U-53
-# - Set Session Timeout: Low U-54
-
-
-# - Set owner and permissions for hosts.lpd file: Low U-55
-# - Manage UMASK settings: Medium U-56
-# - Set owner and permissions for home directories: Medium U-57
-# - Manage the existence of directories designated as home directories: Medium U-58
-# - Search for and remove hidden files and directories: Low U-59
-
-# Service Management
-# - Disable finger service: High U-19
 # - Disable Anonymous FTP: High U-20
+
+echo " " >> $report 2>&1
+echo "----Disable Anonymous FTP: High U-20----" >> $report 2>&1
+
+
+if [ -f /etc/passwd ]
+then
+    if grep 'disable' /etc/passwd | grep -q ftp 
+    then
+        echo "[취약] /etc/passwd 파일에 ftp 계정이 활성화 되어있습니다.">> $report 2>&1
+        echo "[[조치방법]] /etc/passwd 파일에서 ftp 계정을 삭제하세요.">> $report 2>&1
+    else
+        echo "[양호] /etc/passwd 파일에 ftp 계정이 존재하지 않습니다.">> $report 2>&1
+    fi
+     if grep 'disable' /etc/passwd | grep -q anonymous 
+    then
+        echo "[취약] /etc/passwd 파일에 anonymous 계정이 활성화 되어있습니다.">> $report 2>&1
+        echo "[[조치방법]] /etc/passwd 파일에서 anonymous 계정을 삭제하세요. ">> $report 2>&1
+    else
+        echo "[양호] /etc/passwd 파일에 anonymous 계정이 존재하지 않습니다.">> $report 2>&1
+    fi
+else
+    echo "[기타] /etc/passwd 파일이 존재하지 않습니다.">> $report 2>&1
+fi
+
+if [ -f /etc/proftpd/proftpd.conf ]
+then 
+    if [ $(awk '/<Anonymous ~ftp>/{x=NR+10} NR<=x' /etc/proftpd/proftpd.conf| tr -s ' '| grep -v '^#' |grep -q "User ftp" )]
+        then
+            echo "[취약] /etc/proftpd/proftpd.conf 파일에 user ftp 가 활성화되어 있습니다.">> $report 2>&1
+            echo "[[조치방법]] /etc/proftpd/proftpd.conf 파일에 user ftp 를 주석처리 하세요.">> $report 2>&1
+        else
+            echo "[양호] /etc/proftpd/proftpd.conf 파일에 user ftp 가 주석처리 되어있습니다.">> $report 2>&1
+    fi
+
+    if [ $(awk '/<Anonymous ~ftp>/{x=NR+10} NR<=x' /etc/proftpd/proftpd.conf| tr -s ' '| grep -v '^#' |grep -q "UserAlias ftp") ]
+        then
+            echo "[취약] /etc/proftpd/proftpd.conf 파일에 UserAlias ftp 가 활성화되어 있습니다.">> $report 2>&1
+            echo "[[조치방법]] /etc/proftpd/proftpd.conf 파일에 UserAlias ftp 를 주석처리 하세요.">> $report 2>&1
+        else
+            echo "[양호] /etc/proftpd/proftpd.conf 파일에 UserAlias ftp 가 주석처리 되어있습니다.">> $report 2>&1
+    fi
+fi
+
+if [ -f /etc/vsftpd/vsftpd.conf ]
+then 
+    if grep -q -i anonymous_enable=YES
+        then
+            echo "[취약] /etc/vsftpd/vsftpd.conf 파일에 anonymous_enable이 활성화되어 있습니다.">> $report 2>&1
+            echo "[[조치방법]] /etc/vsftpd/vsftpd.conf 파일에 'anonymous_enable=NO'로 설정 하세요.">> $report 2>&1
+        else
+            echo "[양호] /etc/vsftpd/vsftpd.conf 파일에 anonymous_enable 가 NO로 설정 되어있습니다.">> $report 2>&1
+    fi
+
+fi
+
+
+
+
 # - Disable r series services: High U-21
+echo " " >> $report 2>&1
+echo "----Disable r series services: High U-21----" >> $report 2>&1
+
+u_21_dir_arr=("rsh" "rlogin" "rexec")
+u_21_vuln=0
+
+if [ -f /etc/inetd.conf ]
+then
+    if ls -alL /etc/inetd.conf | egrep "rsh|rlogin|rexec" 
+    then
+        echo "[취약] r-command 가 활성화 되어있습니다."
+    else 
+        echo "echo [양호] r-command 가 활성화 되어있습니다."
+    fi
+else 
+    echo "[기타]/etc/inetd.conf 파일이 존재하지 않습니다. "
+fi
+
+
+if [ -d /etc/xinetd.d ]
+then 
+    for i in "${u_21_dir_arr[@]}"
+    do
+        if [ -f /etc/xinetd.d/$i ]
+        then
+            if grep -i "disable" /etc/xinetd.d/$i | grep -iq "no"   
+            then
+                echo "[취약] $i 설정이 활성화 되어있습니다."
+                u_21_vuln=1
+            fi
+
+        fi
+    done
+else
+    echo "[기타]/etc/xinetd.d 디렉토리가 존재하지 않습니다."
+fi
+
+if [ $u_21_vuln -eq 0 ]
+then 
+    echo "[양호]r-command 가 활성화 되어있지 않습니다."
+fi
+
 # - Set owner and permissions for cron files: High U-22
 # - Disable services vulnerable to Dos attacks: High U-23
 # - Disable NFS services: High U-24
@@ -805,6 +908,29 @@ echo "----Prohibit UIDs of '0' other than root: Medium U-44----" >> $report 2>&1
 # - Prohibit the use of links in web services: High U-39
 # - Limit file upload and download in web services: High U-40
 # - Segregate web service areas: High U-41
+# - Apply the latest security patches and vendor recommendations: High U-42
+# - Regularly review and report logs: High U-43
+# - Prohibit UIDs of '0' other than root: Medium U-44
+
+# - Restrict root account's use of su: Low U-45
+# - Set minimum password length: Medium U-46
+# - Set maximum password lifetime: Medium U-47
+# - Set minimum password lifetime: Medium U-48
+# - Removal of unnecessary accounts: Low U-49
+# - Include a minimal number of accounts in the admin group: Low U-50
+# - Prohibit GIDs without accounts: Low U-51
+# - Prohibit identical UIDs: Medium U-52
+# - Check user shells: Low U-53
+# - Set Session Timeout: Low U-54
+
+
+# - Set owner and permissions for hosts.lpd file: Low U-55
+# - Manage UMASK settings: Medium U-56
+# - Set owner and permissions for home directories: Medium U-57
+# - Manage the existence of directories designated as home directories: Medium U-58
+# - Search for and remove hidden files and directories: Low U-59
+
+
 # - Allow remote SSH access: Medium U-60
 # - Check FTP service: Low U-61
 # - Limit shell access for FTP accounts: Medium U-62
@@ -817,10 +943,4 @@ echo "----Prohibit UIDs of '0' other than root: Medium U-44----" >> $report 2>&1
 # - Restrict access to NFS configuration files: Medium U-69
 # - Limit expn, vrfy commands: Medium U-70
 # - Hide Apache web service information: Medium U-71
-
-# Patch Management
-# - Apply the latest security patches and vendor recommendations: High U-42
-
-# Log Management
-# - Regularly review and report logs: High U-43
 # - Set system logging according to policy: Low U-72 
