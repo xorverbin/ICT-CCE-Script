@@ -1890,7 +1890,7 @@ if [ -f /etc/at.allow ]
 then 
     if grep -i "servertokens.*prod" /etc/at.allow | grep -vq '^#'
     then 
-       아 너무하기싫어요.....ㅠㅠㅠㅠㅠㅠ
+      ###########
     else
         echo "[취약] apache 설정파일에 ServerTokens 가 prod로 설정되어있지 않습니다." >> $report 2>&1
         echo "[[조치방법]] apache 구성파일에서 ServerTokens를 prod로 설정하고 ServerSignature 부분을 off로 설정하세요." >> $report 2>&1
