@@ -892,21 +892,85 @@ then
     echo "[양호]r-command 가 활성화 되어있지 않습니다." >> $report 2>&1
 fi
 
-# - Set owner and permissions for cron files: High U-22   here
+# - Set owner and permissions for cron files: High U-22   
 
 echo " " >> $report 2>&1
 echo "----Set owner and permissions for cron files: High U-22----" >> $report 2>&1
 
-u_22_crontab_perm=$(ls -l /usr/bin/crontab | awk '{print $1}')
 
+if [ -f /usr/bin/crontab ]
+then
+    u_22_crontab_perm=$(ls -l /usr/bin/crontab | awk '$1 ~ /s/ {print}')
+    
+    if [ "$u_22_crontab_perm" ]
+    then 
+        echo "[취약] /usr/bin/crontab 서비스에 suid 가 설정되어있습니다." >> $report 2>&1
+    else
+        echo "[양호] /usr/bin/crontab 서비스에 suid 가 설정되어있지 않습니다." >> $report 2>&1
+    fi
+else
+    echo "[기타] /usr/bin/crontab 파일이 존재하지 않습니다." >> $report 2>&1
+    
 
+fi
+
+u_22_dir_arr=(
+    "/etc/cron.hourly" 
+    "/etc/cron.daily"
+    "/etc/cron.weekly" 
+    "/etc/cron.monthly" 
+    "/var/spool/cron" 
+    "/var/spool/cron/crontabs")
+
+u_22_file_arr=(
+    "cron.allow" 
+    "cron.deny")
+
+u_22_chk=0
+
+for i in "${u_22_dir_arr[@]}"
+do
+    if [ -d "$i" ]
+    then
+        for j in "${u_22_file_arr[@]}"
+        do
+            if [ -f "$i/$j" ]
+            then
+                u_22_usr=$(ls -l "$i/$j"| awk '{print $1}')
+                u_22_perm=$(ls -l "$i/$j"| awk '{print $3}')
+                if [ "$u_22_usr" != "root" ]
+                then
+                    echo "[취약] $i/$j 의 소유자가 root가 아닙니다." >> $report 2>&1
+                    echo "[[조치방법]] 'chown root $i/$j' 명령어를 통해 소유자를 변경하세요." >> $report 2>&1
+                    u_22_chk=1
+                fi
+                if [ "$u_22_perm" -lt 640 ]
+                then
+                    echo "[취약] $i/$j 파일의 권한이 640 보다 큽니다." >> $report 2>&1
+                    echo "[[조치방법]] 'chmod 640 $i/$j' 명령어를 통해 권한을 설정하세요." >> $report 2>&1
+                    u_22_chk=1
+                fi
+            fi
+        done
+    fi
+done
+
+if [ $u_22_chk -eq 0 ]
+then 
+    echo "[양호] 관련 취약점이 존재하지 않습니다. "  >> $report 2>&1
+fi
 
 # - Disable services vulnerable to Dos attacks: High U-23
 
 echo " " >> $report 2>&1
 echo "----Disable services vulnerable to Dos attacks: High U-23----" >> $report 2>&1
 
-u_23_file_arr=("echo" "discard" "daytime" "chargen")
+u_23_file_arr=(
+    "echo" 
+    "discard" 
+    "daytime" 
+    "chargen")
+
 u_23_vuln=0
 
 
@@ -962,13 +1026,37 @@ else
     echo "[양호] NFS 서비스가 비활성화 되어있습니다." >> $report 2>&1
 fi 
 
-# - Control access to NFS: High U-25  here
-#
-#
+# - Control access to NFS: High U-25  
 
 echo " " >> $report 2>&1
 echo "----Control access to NFS: High U-25----" >> $report 2>&1
 
+
+u_25_chk=0
+
+if ps -ef | grep -q nfs 
+then 
+    if [ -f /etc/exports ]
+    then 
+        if cat /etc/exports | grep -v '^#' | grep '/' | grep -q '*' 
+        then 
+            echo "[취약] /etc/exports 파일에 everyone 공유가 설정되어있습니다." >> $report 2>&1
+            echo "[[조치방법]] /etc/exports 파일에 접근가능한 호스트명을 추가하세요." >> $report 2>&1
+            u_25_chk=1
+        fi
+        if cat /etc/exports | grep -v '^#' | grep '/' |grep -q insecure
+        then 
+            echo "[취약] /etc/exports 파일에 insecure 이 설정되어있습니다." >> $report 2>&1
+            echo "[[조치방법]] /etc/exports 파일에 insecure 구문을 제거하세요." >> $report 2>&1
+            u_25_chk=1
+        fi
+    fi
+fi
+
+if [ $u_25_chk -eq 0 ]
+then 
+    echo "[양호] nfs 가 실행되고 있지 않거나 취약점이 존재하지 않습니다. "  >> $report 2>&1
+fi
 
 
 
@@ -1207,7 +1295,7 @@ fi
 echo " " >> $report 2>&1
 echo "----Remove directory listing from web services: High U-35----" >> $report 2>&1
 
-if find / \( -name "apache2.conf" -o -name "httpd.conf" \) 2>/dev/null | xargs grep -i options |grep -i "indexes"| grep -v "^#" |grep -ivq "-indexes"
+if find / -type f \( -name "apache2.conf" -o -name "httpd.conf" \) 2>/dev/null | xargs grep -i "Options" | grep -i "Indexes" | grep -v "^#" | grep -ivq "\-Indexes"
 then 
     echo "[취약] apache의 디렉터리 검색기능이 활성화 되어있습니다" >> $report 2>&1
     echo "[[조치방법]] apache 구성파일에서 options 부분에 -Indexes를 추가하세요." >> $report 2>&1
@@ -1376,11 +1464,15 @@ else
     echo "[기타] /etc/passwd 파일이 존재하지 않습니다."  >> $report 2>&1
 fi        
 
-#### - Restrict root account's use of su: Low U-45  here
+#### - Restrict root account's use of su: Low U-45  
 
 echo " " >> $report 2>&1
 echo "----Restrict root account's use of su: Low U-45----" >> $report 2>&1
 
+
+echo "수동 점검이 필요한 부분입니다. 아래와 같은 항목을 확인하세요" >> $report 2>&1
+
+echo " 1) su 명령어를 특정 그룹에 속한 사용자만 사용하도록 제한되어 있는지 여부" >> $report 2>&1
 
 
 # - Set minimum password length: Medium U-46
@@ -1548,11 +1640,11 @@ then
     if cat /etc/passwd | egrep "^daemon|^bin|^sys|^adm|^listen|^nobody|^nobody4|^noaccess|^diag|^operator|^games|^gopher" | grep -v "admin" | grep -vq nologin
     then
         echo "[양호] 로그인이 불필요한 계정에 쉘이 부여되어있지 않습니다. " >> $report 2>&1
-        else 
+    else 
             echo "[취약] 로그인이 불필요한 계정에 쉘이 부여되어 있습니다.">> $report 2>&1
             echo "[[조치방법]] 아래의 계정에 /sbin/nologin로 변경하세요 " >> $report 2>&1
-            echo "$(if cat /etc/passwd | egrep "^daemon|^bin|^sys|^adm|^listen|^nobody|^nobody4|^noaccess|^diag|^operator|^games|^gopher" | grep -v "admin" | grep -v nologin)">> $report 2>&1
-        fi
+            echo "$(cat /etc/passwd | egrep "^daemon|^bin|^sys|^adm|^listen|^nobody|^nobody4|^noaccess|^diag|^operator|^games|^gopher" | grep -v "admin" | grep -v nologin)">> $report 2>&1
+    fi
 else
     echo "[기타] /etc/passwd 파일이 존재하지 않습니다." >> $report 2>&1
 fi
@@ -1827,79 +1919,127 @@ fi
 echo " " >> $report 2>&1
 echo "----Set owner and permissions for Ftpusers file: Low U-63---" >> $report 2>&1
 
-if ps aux | grep -v grep | grep -q ftp 
-
 u_63_chk=0
-u_63_file_arr=(
+if ps aux | grep -v grep | grep -q ftp 
+then
+
+    u_63_file_arr=(
+        "/etc/ftpusers" 
+        "/etc/ftpd/ftpusers" 
+        "/etc/vsftpd/ftpusers" 
+        "/etc/vsftpd/user_list" 
+        "/etc/vsftpd.ftpusers" 
+        "/etc/vsftpd.user_list")
+
+    for i in "${u_63_file_arr[@]}"
+    do
+        if [ -f $i ]
+        then
+            u_63_chk=2
+            u_63_perm=$(ls -l $i| awk '{print $1}')
+            u_63_usr=$(ls -l $i | awk '{print $3}')
+
+            if [ "$u_63_usr" != 'root' ]
+            then
+                echo "[취약] $i 의 소유자가 root가 아닙니다.">> $report 2>&1
+                echo "[[조치방법]] 'chown root $i' 명령어를 통해 소유자를 변경하세요 .">> $report 2>&1
+                u_63_chk=1
+            fi
+
+            if [ $u_63_perm -lt 640 ]
+            then
+                echo "[취약] $i 파일의 권한이 640 보다 큽니다.">> $report 2>&1
+                echo "[[조치방법]] 'chmod 640 $i' 명령어를 통해 권한을 설정하세요.">> $report 2>&1
+                u_63_chk=1
+            fi
+
+            if [ $u_63_chk -eq 2 ]
+            then 
+                echo "[양호] $i 파일의 권한이 640 이하고 소유주가 root로 설정되어있습니다 "  >> $report 2>&1
+            fi
+        fi
+    done
+fi
+
+if [ $u_63_chk -eq 0 ]
+then 
+    echo "[기타] 관련 파일이 존재하지 않거나 ftp 가 비활성화 되어있습니다. "  >> $report 2>&1
+fi
+
+# - Configure Ftpusers file: Medium U-64     
+echo " " >> $report 2>&1
+echo "----Configure Ftpusers file: Medium U-64---" >> $report 2>&1
+
+u_64_chk=0
+
+if ps aux | grep -v grep | grep -q ftp 
+then
+    u_64_file_arr=(
     "/etc/ftpusers" 
     "/etc/ftpd/ftpusers" 
     "/etc/vsftpd/ftpusers" 
     "/etc/vsftpd/user_list" 
-    "/etc/vsftpd/user_list" 
-    "/etc/vsftpd.ftpusers" 
     "/etc/vsftpd.ftpusers" 
     "/etc/vsftpd.user_list")
+    for i in "${u_64_file_arr[@]}"
+    do
+         if [ -f $i ]
+         then
+            if cat $i | grep -v '^#' | grep root
+            then
+                echo "[취약] /etc/ftpuser에 root가 활성화 되어있습니다. ">> $report 2>&1
+                echo "[[조치방법]] root를 삭제하거나 주석처리하세요. ">> $report 2>&1
+                u_64_chk=1
+            fi
+        fi
+    done
+                
+fi
 
-for i in "${u_13_file_arr[@]}"
+if [ $u_64_chk -eq 0 ]
+then 
+    echo "[기타] 관련 파일이 존재하지 않거나 ftp 가 비활성화 되어있습니다. "  >> $report 2>&1
+fi
+
+
+
+# - Set owner and permissions for at files: Medium U-65    
+echo " " >> $report 2>&1
+echo "----Set owner and permissions for at files: Medium U-65---" >> $report 2>&1
+
+u_65_file_arr=(
+    "/etc/at.allow" 
+    "/etc/at.deny")
+
+u_65_chk=0
+
+
+for i in "${u_22_file_arr[@]}"
 do
-    if [ -f $i ]
+    if [ -f "$i" ]
     then
-        u_63_chk=2
-        u_63_perm=$(ls -l $i| awk '{print $1}')
-        u_63_usr=$(ls -l $i | awk '{print $3}')
-
-        if [ "$u_63_usr" != 'root' ]
+        u_65_usr=$(ls -l "$i"| awk '{print $1}')
+        u_65_perm=$(ls -l "$i"| awk '{print $3}')
+        if [ "$u_65_usr" != "root" ]
         then
-            echo "[취약] $i 의 소유자가 root가 아닙니다.">> $report 2>&1
-            echo "[[조치방법]] 'chown root $i' 명령어를 통해 소유자를 변경하세요 .">> $report 2>&1
-            u_63_chk=1
+            echo "[취약] $i 의 소유자가 root가 아닙니다." >> $report 2>&1
+            echo "[[조치방법]] 'chown root $i' 명령어를 통해 소유자를 변경하세요." >> $report 2>&1
+            u_65_chk=1
         fi
-
-        if [ $(stat -c "%a" $i) -lt 640 ]
+        if [ "$u_65_perm" -lt 640 ]
         then
-            echo "[취약] $i 파일의 권한이 640 보다 큽니다.">> $report 2>&1
-            echo "[[조치방법]] 'chmod 640 $i' 명령어를 통해 권한을 설정하세요.">> $report 2>&1
-            u_63_chk=1
-        fi
-
-        if [ u_63_chk -eq 2 ]
-        then 
-            echo "[양호] $i 파일의 권한이 640 이하고 소유주가 root로 설정되어있습니다 "  >> $report 2>&1
+            echo "[취약] $i 파일의 권한이 640 보다 큽니다." >> $report 2>&1
+            echo "[[조치방법]] 'chmod 640 $i' 명령어를 통해 권한을 설정하세요." >> $report 2>&1
+            u_65_chk=1
         fi
     fi
 done
 
-if [ u_63_chk -eq 0 ]
+
+if [ $u_65_chk -eq 0 ]
 then 
-    echo "[기타] 관련 파일이 존재하지 않습니다. "  >> $report 2>&1
+    echo "[양호] 관련 취약점이 존재하지 않습니다. "  >> $report 2>&1
 fi
-
-# - Configure Ftpusers file: Medium U-64     here
-echo " " >> $report 2>&1
-echo "----Configure Ftpusers file: Medium U-64---" >> $report 2>&1
-
-
-
-
-# - Set owner and permissions for at files: Medium U-65    here
-echo " " >> $report 2>&1
-echo "----Set owner and permissions for at files: Medium U-65---" >> $report 2>&1
-
-
-if [ -f /etc/at.allow ]
-then 
-    if grep -i "servertokens.*prod" /etc/at.allow | grep -vq '^#'
-    then 
-      ###########
-    else
-        echo "[취약] apache 설정파일에 ServerTokens 가 prod로 설정되어있지 않습니다." >> $report 2>&1
-        echo "[[조치방법]] apache 구성파일에서 ServerTokens를 prod로 설정하고 ServerSignature 부분을 off로 설정하세요." >> $report 2>&1
-    fi
-else
-    echo "[기타] apache 설정파일이 존재하지 않습니다." >> $report 2>&1
-fi
-
-
 
 # - Check for running SNMP services: Medium U-66
 
@@ -2054,7 +2194,7 @@ then
 
     fi
 
-    if [ $(stat -c "%a" /etc/exports) -lt 640 ]
+    if [ $u_68_perm -lt 640 ]
     then
         echo "[취약] /etc/exports 파일의 권한이 640 보다 큽니다.">> $report 2>&1
         echo "[[조치방법]] 'chmod 640 /etc/exports' 명령어를 통해 권한을 설정하세요.">> $report 2>&1
@@ -2070,18 +2210,18 @@ fi
 echo " " >> $report 2>&1
 echo "----Limit expn, vrfy commands: Medium U-70---" >> $report 2>&1
 
-if [ -f /etc/mail/sendmail.cf]
+if [ -f /etc/mail/sendmail.cf ]
 then 
     if grep -iq PrivacyOptions /etc/mail/sendmail.cf | grep -i noexpn | grep -i novrfy 
     then 
-        echo "[양호] snmp community 의 이름이 public, private 외에 다른 것으로 설정되어있습니다."
+        echo "[양호] snmp community 의 이름이 public, private 외에 다른 것으로 설정되어있습니다." >> $report 2>&1
     else
-        echo "[취약] snmp community 의 이름이 public, private 로 설정되어있습니다."
-        echo "[[조치방법]] com2sec notConfigUser default 부분을 public, private 외에 다른 이름으로 대체하고 서비스를 재시작하세요."
+        echo "[취약] snmp community 의 이름이 public, private 로 설정되어있습니다." >> $report 2>&1
+        echo "[[조치방법]] com2sec notConfigUser default 부분을 public, private 외에 다른 이름으로 대체하고 서비스를 재시작하세요." >> $report 2>&1
 
     fi
 else
-    echo "[기타] /etc/snmp/snmpd.conf 파일이 존재하지 않습니다. "
+    echo "[기타] /etc/snmp/snmpd.conf 파일이 존재하지 않습니다. "  >> $report 2>&1
 fi
 
 
@@ -2090,13 +2230,13 @@ echo " " >> $report 2>&1
 echo "----Hide Apache web service information: Medium U-71---" >> $report 2>&1
 
 
-u_70_file_path=$(find / \( -name "apache2.conf" -o -name "httpd.conf" \) 2>/dev/null)
+u_71_file_path=$(find / \( -name "apache2.conf" -o -name "httpd.conf" \) 2>/dev/null)
 
-if [ -f u_70_file_path ]
+if [ -f $u_71_file_path ]
 then 
-    if grep -iq "servertokens.*prod" $u_70_file_path | grep -v '^#'
+    if grep -iq "servertokens.*prod" $u_71_file_path | grep -v '^#'
     then 
-        if grep -iq "serversigniture.*off" $u_70_file_path | grep -v '^#'
+        if grep -iq "serversigniture.*off" $u_71_file_path | grep -v '^#'
         then 
             echo "[양호] apache 설정파일에 ServerTokens Prod, ServerSignature Off가 설정되어있습니다. " >> $report 2>&1
 
